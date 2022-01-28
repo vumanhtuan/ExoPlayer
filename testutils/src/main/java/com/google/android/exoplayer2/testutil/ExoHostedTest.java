@@ -165,21 +165,7 @@ public abstract class ExoHostedTest implements AnalyticsListener, HostedTest {
       throw new RuntimeException(playerError);
     }
     logMetrics(audioDecoderCounters, videoDecoderCounters);
-    if (expectedPlayingTimeMs != EXPECTED_PLAYING_TIME_UNSET) {
-      long playingTimeToAssertMs =
-          expectedPlayingTimeMs == EXPECTED_PLAYING_TIME_MEDIA_DURATION_MS
-              ? sourceDurationMs
-              : expectedPlayingTimeMs;
-      // Assert that the playback spanned the correct duration of time.
-      long minAllowedActualPlayingTimeMs = playingTimeToAssertMs - MAX_PLAYING_TIME_DISCREPANCY_MS;
-      long maxAllowedActualPlayingTimeMs = playingTimeToAssertMs + MAX_PLAYING_TIME_DISCREPANCY_MS;
-      assertWithMessage(
-              "Total playing time: %sms. Expected: %sms", totalPlayingTimeMs, playingTimeToAssertMs)
-          .that(
-              minAllowedActualPlayingTimeMs <= totalPlayingTimeMs
-                  && totalPlayingTimeMs <= maxAllowedActualPlayingTimeMs)
-          .isTrue();
-    }
+
     // Make any additional assertions.
     assertPassed(audioDecoderCounters, videoDecoderCounters);
   }
