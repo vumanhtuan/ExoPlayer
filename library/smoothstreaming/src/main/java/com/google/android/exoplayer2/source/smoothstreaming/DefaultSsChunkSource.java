@@ -44,6 +44,7 @@ import com.google.android.exoplayer2.upstream.LoadErrorHandlingPolicy.FallbackSe
 import com.google.android.exoplayer2.upstream.LoaderErrorThrower;
 import com.google.android.exoplayer2.upstream.TransferListener;
 import com.google.android.exoplayer2.util.Assertions;
+import com.google.android.exoplayer2.util.Log;
 import java.io.IOException;
 import java.util.List;
 
@@ -277,6 +278,7 @@ public class DefaultSsChunkSource implements SsChunkSource {
             trackSelection.getSelectionReason(),
             trackSelection.getSelectionData(),
             chunkExtractor);
+    Log.e("out.chunk",out.chunk.toString());
   }
 
   @Override
