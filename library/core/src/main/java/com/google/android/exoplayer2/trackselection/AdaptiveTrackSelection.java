@@ -460,6 +460,7 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
     }
     int newSelectedIndex = determineIdealSelectedIndex(nowMs, chunkDurationUs,
         previousSelectedIndex, bufferedDurationUs);
+//    int newSelectedIndex = determineIdealSelectedIndex(nowMs, chunkDurationUs);
     if (!isBlacklisted(previousSelectedIndex, nowMs)) {
       // Revert back to the previous selection if conditions are not suitable for switching.
       Format currentFormat = getFormat(previousSelectedIndex);
@@ -503,44 +504,44 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
     long nowMs = clock.elapsedRealtime();
     if (!shouldEvaluateQueueSize(nowMs, queue)) {
       return queue.size();
-    }
-    lastBufferEvaluationMs = nowMs;
-    lastBufferEvaluationMediaChunk = queue.isEmpty() ? null : Iterables.getLast(queue);
-
-    if (queue.isEmpty()) {
-      return 0;
-    }
-    int queueSize = queue.size();
-    MediaChunk lastChunk = queue.get(queueSize - 1);
-    long playoutBufferedDurationBeforeLastChunkUs =
-        Util.getPlayoutDurationForMediaDuration(
-            lastChunk.startTimeUs - playbackPositionUs, playbackSpeed);
-    long minDurationToRetainAfterDiscardUs = getMinDurationToRetainAfterDiscardUs();
-    if (playoutBufferedDurationBeforeLastChunkUs < minDurationToRetainAfterDiscardUs) {
-      return queueSize;
-    }
-    int idealSelectedIndex = determineIdealSelectedIndex(nowMs, getLastChunkDurationUs(queue));
-    Format idealFormat = getFormat(idealSelectedIndex);
-    // If chunks contain video, discard from the first chunk after minDurationToRetainAfterDiscardUs
-    // whose resolution and bitrate are both lower than the ideal track, and whose width and height
-    // are less than or equal to maxWidthToDiscard and maxHeightToDiscard respectively.
-    for (int i = 0; i < queueSize; i++) {
-      MediaChunk chunk = queue.get(i);
-      Format format = chunk.trackFormat;
-      long mediaDurationBeforeThisChunkUs = chunk.startTimeUs - playbackPositionUs;
-      long playoutDurationBeforeThisChunkUs =
-          Util.getPlayoutDurationForMediaDuration(mediaDurationBeforeThisChunkUs, playbackSpeed);
-      if (playoutDurationBeforeThisChunkUs >= minDurationToRetainAfterDiscardUs
-          && format.bitrate < idealFormat.bitrate
-          && format.height != Format.NO_VALUE
-          && format.height <= maxHeightToDiscard
-          && format.width != Format.NO_VALUE
-          && format.width <= maxWidthToDiscard
-          && format.height < idealFormat.height) {
-        return i;
-      }
-    }
-    return queueSize;
+    } else return queue.size();
+//    lastBufferEvaluationMs = nowMs;
+//    lastBufferEvaluationMediaChunk = queue.isEmpty() ? null : Iterables.getLast(queue);
+//
+//    if (queue.isEmpty()) {
+//      return 0;
+//    }
+//    int queueSize = queue.size();
+//    MediaChunk lastChunk = queue.get(queueSize - 1);
+//    long playoutBufferedDurationBeforeLastChunkUs =
+//        Util.getPlayoutDurationForMediaDuration(
+//            lastChunk.startTimeUs - playbackPositionUs, playbackSpeed);
+//    long minDurationToRetainAfterDiscardUs = getMinDurationToRetainAfterDiscardUs();
+//    if (playoutBufferedDurationBeforeLastChunkUs < minDurationToRetainAfterDiscardUs) {
+//      return queueSize;
+//    }
+//    int idealSelectedIndex = determineIdealSelectedIndex(nowMs, getLastChunkDurationUs(queue));
+//    Format idealFormat = getFormat(idealSelectedIndex);
+//    // If chunks contain video, discard from the first chunk after minDurationToRetainAfterDiscardUs
+//    // whose resolution and bitrate are both lower than the ideal track, and whose width and height
+//    // are less than or equal to maxWidthToDiscard and maxHeightToDiscard respectively.
+//    for (int i = 0; i < queueSize; i++) {
+//      MediaChunk chunk = queue.get(i);
+//      Format format = chunk.trackFormat;
+//      long mediaDurationBeforeThisChunkUs = chunk.startTimeUs - playbackPositionUs;
+//      long playoutDurationBeforeThisChunkUs =
+//          Util.getPlayoutDurationForMediaDuration(mediaDurationBeforeThisChunkUs, playbackSpeed);
+//      if (playoutDurationBeforeThisChunkUs >= minDurationToRetainAfterDiscardUs
+//          && format.bitrate < idealFormat.bitrate
+//          && format.height != Format.NO_VALUE
+//          && format.height <= maxHeightToDiscard
+//          && format.width != Format.NO_VALUE
+//          && format.width <= maxWidthToDiscard
+//          && format.height < idealFormat.height) {
+//        return i;
+//      }
+//    }
+//    return queueSize;
   }
 
   /**
@@ -555,6 +556,27 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
   @SuppressWarnings("unused")
   protected boolean canSelectFormat(Format format, int trackBitrate, long effectiveBitrate) {
     return trackBitrate <= effectiveBitrate;
+  }
+
+  protected int selectFormat(long effectiveBitrate,
+      long nowMs, int previousSelectedIndex, long bufferedDurationUs) {
+    Format currentFormat = getFormat(previousSelectedIndex);
+    double M = 4.3;
+    int lowestBitrateAllowedIndex = 0;
+    double QoEMax = 0;
+    for (int i = 0; i < length; i++) {
+      if (nowMs == Long.MIN_VALUE || !isBlacklisted(i, nowMs)) {
+        Format format = getFormat(i);
+        double T = format.bitrate * 2 / effectiveBitrate - bufferedDurationUs;
+        double QoE = format.bitrate - M * T - Math.abs(format.bitrate - currentFormat.bitrate);
+        if (QoE > QoEMax) {
+          QoEMax = QoE;
+          lowestBitrateAllowedIndex = i;
+        }
+      }
+    }
+    Log.e("lowestBitrateAllowedIndex", lowestBitrateAllowedIndex + "");
+    return lowestBitrateAllowedIndex;
   }
 
   /**
@@ -596,38 +618,57 @@ public class AdaptiveTrackSelection extends BaseTrackSelection {
       if (nowMs == Long.MIN_VALUE || !isBlacklisted(i, nowMs)) {
         Format format = getFormat(i);
         if (canSelectFormat(format, format.bitrate, effectiveBitrate)) {
+          Log.e("lowestBitrateAllowedIndex", "\t" + lowestBitrateAllowedIndex);
           return i;
         } else {
           lowestBitrateAllowedIndex = i;
         }
       }
     }
+    Log.e("lowestBitrateAllowedIndex", "\t" + lowestBitrateAllowedIndex);
     return lowestBitrateAllowedIndex;
   }
 
   private int determineIdealSelectedIndex(long nowMs, long chunkDurationUs,
       int previousSelectedIndex, long bufferedDurationUs) {
     long effectiveBitrate = getAllocatedBandwidth(chunkDurationUs);
+//    return selectFormat(effectiveBitrate, nowMs, previousSelectedIndex, bufferedDurationUs);
     Format currentFormat = getFormat(previousSelectedIndex);
     double M = 4.3;
-    int lowestBitrateAllowedIndex = 0;
+    int lowestBitrateAllowedIndex = 7;
     double QoEMax = 0;
+    ArrayList<Integer> ListIndex = new ArrayList<Integer>();
     for (int i = 0; i < length; i++) {
       if (nowMs == Long.MIN_VALUE || !isBlacklisted(i, nowMs)) {
         Format format = getFormat(i);
-        double T = format.bitrate * 2 / effectiveBitrate - bufferedDurationUs;
-        double QoE = format.bitrate - M * T - Math.abs(format.bitrate - currentFormat.bitrate);
-        if (QoE > QoEMax) {
-          QoEMax = QoE;
-          lowestBitrateAllowedIndex = i;
+        if (canSelectFormat(format, format.bitrate, effectiveBitrate)) {
+          ListIndex.add(i);
         }
-//        if (canSelectFormat(format, format.bitrate, effectiveBitrate)) {
-//          return i;
-//        } else {
-//          lowestBitrateAllowedIndex = i;
-//        }
       }
     }
+    for (int i = 0; i < ListIndex.size(); i++) {
+      Format format = getFormat(ListIndex.get(i));
+      double T = format.bitrate * 2 / effectiveBitrate - bufferedDurationUs;
+      double QoE = format.bitrate - M * T - Math.abs(format.bitrate - currentFormat.bitrate);
+      if (QoE > QoEMax) {
+        QoEMax = QoE;
+        lowestBitrateAllowedIndex = ListIndex.get(i);
+      }
+    }
+//    for (int i = 0; i < length; i++) {
+//      if (nowMs == Long.MIN_VALUE || !isBlacklisted(i, nowMs)) {
+//        Format format = getFormat(i);
+//        double T = format.bitrate * 2 / effectiveBitrate - bufferedDurationUs;
+//        double QoE = format.bitrate - M * T - Math.abs(format.bitrate - currentFormat.bitrate);
+//        if (QoE > QoEMax) {
+//          if (canSelectFormat(format, format.bitrate, effectiveBitrate)) {
+//            QoEMax = QoE;
+//            lowestBitrateAllowedIndex = i;
+//          }
+//        }
+//      }
+//    }
+    Log.e("lowestBitrateAllowedIndex", "\t" + lowestBitrateAllowedIndex + "\t" + ListIndex.toString());
     return lowestBitrateAllowedIndex;
   }
 
